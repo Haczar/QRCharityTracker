@@ -190,23 +190,25 @@
                 { fps: 10, qrbox: 250 },
                 (decodedText) => {
                     const trimmedDecodedText = decodedText.trim(); // Trim scanned text
-                    console.log("Scanned QR Code Data (Trimmed):", trimmedDecodedText); // Debug log
+                    const match              = csvRows.find(row => row.name.trim() === trimmedDecodedText);
 
-                    const match = csvRows.find(row => row.name.trim() === trimmedDecodedText);
-                    console.log("Matching Row:", match); // Debug log
-
-                    if (match) {
-                        if (match.status === "NONE") {
+                    if (match) 
+                    {
+                        if (match.status === "NONE") 
+                        {
                             if (confirm(`${match.name} verified: Proceed to give donation.`)) {
                                 match.status = "Recieved";
                                 match.timestamp = new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', hour12: true }); // Add current timestamp
-                                updateCsvFile();
                                 logToApp(`Status updated for: ${trimmedDecodedText}`);
                             }
-                        } else {
+                        } 
+                        else 
+                        {
                             alert(`${match.name} has already received donation.`);
                         }
-                    } else {
+                    } 
+                    else 
+                    {
                         console.log("No match found. CSV Names:", csvRows.map(row => row.name)); // Log all names in CSV
                         alert(`No match found for: "${trimmedDecodedText}". See console for details.`);
                     }
@@ -255,34 +257,6 @@
                 logToApp("Error reading CSV file.");
             };
             reader.readAsText(csvFile);
-        }
-
-        function updateCsvFile() {
-            const updatedRows = csvRows.map(row => ({
-                name: row.name,
-                status: row.status,
-                timestamp: row.timestamp
-            }));
-
-            fetch('/update_csv', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ rows: updatedRows }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log(data.message); // Log server response
-                if (data.message === 'CSV updated successfully') {
-                    logToApp("CSV file updated on the server.");
-                } else {
-                    logToApp(data.message);
-                }
-            })
-            .catch(err => {
-                logToApp(`Error updating CSV on server: ${err.message}`);
-            });
         }
     
         function generateAndDownloadCSV() {
