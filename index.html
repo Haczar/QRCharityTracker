@@ -212,6 +212,7 @@
                         console.log("No match found. CSV Names:", csvRows.map(row => row.name)); // Log all names in CSV
                         alert(`No match found for: "${trimmedDecodedText}". See console for details.`);
                     }
+                    stopScanner();                    
                 }
             ).then(() => {
                 logToApp("Scanner is running. Ready to scan QR codes.");
