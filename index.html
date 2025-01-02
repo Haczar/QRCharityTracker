@@ -197,14 +197,14 @@
 
                     if (match) {
                         if (match.status === "NONE") {
-                            if (confirm(`Person verified: Please give donation.`)) {
+                            if (confirm(`${match.name} verified: Proceed to give donation.`)) {
                                 match.status = "Recieved";
                                 match.timestamp = new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', hour12: true }); // Add current timestamp
                                 updateCsvFile();
                                 logToApp(`Status updated for: ${trimmedDecodedText}`);
                             }
                         } else {
-                            alert("Person verified: Has already received donation.");
+                            alert(`${match.name} has already received donation.`);
                         }
                     } else {
                         console.log("No match found. CSV Names:", csvRows.map(row => row.name)); // Log all names in CSV
