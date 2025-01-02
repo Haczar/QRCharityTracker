@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile QR Code Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        #qr-reader {
+            margin: auto;
+            text-align: center;
+            width: 300px;
+            display: none;
+        }
+        #scanResult {
+            margin-top: 20px;
+            font-size: 18px;
+            text-align: center;
+        }
+        button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Mobile QR Code Scanner</h1>
+
+    <div style="text-align: center;">
+        <h3>Upload CSV File</h3>
+        <input type="file" id="csvFile" />
+        <button onclick="uploadCSV()">Upload</button>
+        <p id="uploadStatus"></p>
+
+    </div>
+
+    <div style="text-align: center;">
+        <h3>Scan QR Code</h3>
+        <button id="startScannerButton" onclick="startScanner()">Start Scanner</button>
+        <button id="stopScannerButton" onclick="stopScanner()" style="display: none;">Stop Scanner</button>
+        <div id="qr-reader"></div>
+        <p id="scanResult">Press "Start Scanner" to begin.</p>
+    </div>
+
+    <div style="text-align: center;">
+        <h3>Toggle View CSV Data</h3>
+        <button onclick="toggleCsvTable()">Toggle View CSV Data</button>
+        <div id="csvTableContainer" style="margin: 20px; text-align: center; display: none;">
+            <table border="1" style="margin: auto; border-collapse: collapse; width: 80%;">
+                <thead id="csvTableHeader"></thead>
+                <tbody id="csvTableBody"></tbody>
+            </table>
+        </div>
+
+        <h3>Download Updated CSV</h3>
+        <button onclick="generateAndDownloadCSV()">Download CSV</button>
+    </div>
+    
+    <div id="csvTableContainer" style="margin: 20px; text-align: center; display: none;">
+        <table border="1" style="margin: auto; border-collapse: collapse; width: 80%;">
+            <thead id="csvTableHeader"></thead>
+            <tbody id="csvTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let html5QrCode;
+        let uploadedCsvData = [];
+        let csvRows = [];
+
+        function logToApp(message) {
+            const logElement = document.getElementById("scanResult");
+            logElement.innerText = message; // Update the log display
+        }
+
+        function parseCsvData(fileContent) {
+            const rows = fileContent.split(/\r?\n/); // Handle both \n and \r\n
+            const headers = rows[0]?.split(",") || [];
+            const nameIndex = headers.indexOf("Name");
+            const statusIndex = headers.indexOf("Status");
+            const timestampIndex = headers.indexOf("Timestamp");
+
+            if (nameIndex === -1 || statusIndex === -1 || timestampIndex === -1) {
+                logToApp("Error: 'Name', 'Status', or 'Timestamp' column not found in CSV.");
+                return [];
+            }
+
+            csvRows = rows.slice(1).map(row => {
+                const cols = row.split(",");
+                if (cols.length < headers.length) {
+                    console.warn("Skipping incomplete row:", row); // Warn for incomplete rows
+                    return null;
+                }
+                return {
+                    name: cols[nameIndex]?.trim(),
+                    status: cols[statusIndex]?.trim(),
+                    timestamp: cols[timestampIndex]?.trim(),
+                };
+            }).filter(row => row && row.name); // Filter out empty or invalid rows
+
+            console.log("Parsed CSV Rows:", csvRows); // Debug log for all rows
+            console.log("CSV Headers:", headers);
+            return csvRows.map(row => row.name);
+        }
+
+        function toggleCsvTable() {
+            const tableContainer = document.getElementById("csvTableContainer");
+
+            // Toggle display property
+            if (tableContainer.style.display === "none" || tableContainer.style.display === "") {
+                tableContainer.style.display = "block";
+                renderCsvTable(); // Render the table content when shown
+            } else {
+                tableContainer.style.display = "none";
+            }
+        }
+        
+        function renderCsvTable() {
+            const tableContainer = document.getElementById("csvTableContainer");
+            const tableHeader = document.getElementById("csvTableHeader");
+            const tableBody = document.getElementById("csvTableBody");
+
+            // Clear previous content
+            tableHeader.innerHTML = "";
+            tableBody.innerHTML = "";
+
+            if (csvRows.length === 0) {
+                alert("No data available. Please upload and parse a CSV first.");
+                return;
+            }
+
+            // Render headers
+            tableHeader.innerHTML = `
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Timestamp</th>
+                </tr>
+            `;
+
+            // Render rows
+            csvRows.forEach(row => {
+                const rowHtml = `
+                    <tr>
+                        <td>${row.name}</td>
+                        <td>${row.status}</td>
+                        <td>${row.timestamp || ""}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += rowHtml;
+            });
+
+            // Show the table
+            tableContainer.style.display = "block";
+        }
+
+        function requestCameraPermissions() {
+            logToApp("Requesting camera permissions...");
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((stream) => {
+                    logToApp("Camera access granted");
+                    stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+                    startHtml5QrCodeScanner(); // Proceed to initialize the scanner
+                })
+                .catch((err) => {
+                    logToApp("Camera access denied: " + err.message);
+                });
+        }
+
+        function startScanner() {
+            logToApp("Start Scanner button clicked");
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                logToApp("Camera API not supported by this browser.");
+                return;
+            }
+
+            document.getElementById("startScannerButton").style.display = "none";
+            document.getElementById("stopScannerButton").style.display = "inline";
+            requestCameraPermissions(); // Ensure permissions are granted before starting
+        }
+
+        function startHtml5QrCodeScanner() {
+            logToApp("Initializing scanner...");
+            const qrReaderDiv = document.getElementById("qr-reader");
+            qrReaderDiv.style.display = "block";
+
+            html5QrCode = new Html5Qrcode("qr-reader");
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: 250 },
+                (decodedText) => {
+                    const trimmedDecodedText = decodedText.trim(); // Trim scanned text
+                    console.log("Scanned QR Code Data (Trimmed):", trimmedDecodedText); // Debug log
+
+                    const match = csvRows.find(row => row.name.trim() === trimmedDecodedText);
+                    console.log("Matching Row:", match); // Debug log
+
+                    if (match) {
+                        if (match.status === "NONE") {
+                            if (confirm(`Person verified: Please give donation.`)) {
+                                match.status = "Recieved";
+                                match.timestamp = new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', hour12: true }); // Add current timestamp
+                                updateCsvFile();
+                                logToApp(`Status updated for: ${trimmedDecodedText}`);
+                            }
+                        } else {
+                            alert("Person verified: Has already received donation.");
+                        }
+                    } else {
+                        console.log("No match found. CSV Names:", csvRows.map(row => row.name)); // Log all names in CSV
+                        alert(`No match found for: "${trimmedDecodedText}". See console for details.`);
+                    }
+                }
+            ).then(() => {
+                logToApp("Scanner is running. Ready to scan QR codes.");
+            }).catch((err) => {
+                logToApp("Scanner initialization failed: " + err.message);
+                document.getElementById("startScannerButton").style.display = "inline";
+                document.getElementById("stopScannerButton").style.display = "none";
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById("qr-reader").style.display = "none";
+                    document.getElementById("startScannerButton").style.display = "inline";
+                    document.getElementById("stopScannerButton").style.display = "none";
+                    logToApp("Scanner stopped. Press 'Start Scanner' to begin again.");
+                }).catch((err) => {
+                    logToApp("Failed to stop the scanner: " + err.message);
+                });
+            }
+        }
+
+        function uploadCSV() {
+            const csvFile = document.getElementById('csvFile').files[0];
+            if (!csvFile) {
+                alert("Please select a CSV file!");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const fileContent = event.target.result;
+                uploadedCsvData = parseCsvData(fileContent);
+
+                if (uploadedCsvData.length > 0) {
+                    logToApp("CSV file parsed successfully. Ready to scan.");
+                } else {
+                    logToApp("Error: No valid names found in the uploaded CSV.");
+                }
+            };
+            reader.onerror = function () {
+                logToApp("Error reading CSV file.");
+            };
+            reader.readAsText(csvFile);
+        }
+
+        function updateCsvFile() {
+            const updatedRows = csvRows.map(row => ({
+                name: row.name,
+                status: row.status,
+                timestamp: row.timestamp
+            }));
+
+            fetch('/update_csv', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ rows: updatedRows }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data.message); // Log server response
+                if (data.message === 'CSV updated successfully') {
+                    logToApp("CSV file updated on the server.");
+                } else {
+                    logToApp(data.message);
+                }
+            })
+            .catch(err => {
+                logToApp(`Error updating CSV on server: ${err.message}`);
+            });
+        }
+    
+        function generateAndDownloadCSV() {
+            if (csvRows.length === 0) {
+                logToApp("No data available to download. Please upload and update a CSV first.");
+                alert("No data available to download. Please upload and update a CSV first.");
+                return;
+            }
+
+            try {
+                logToApp("Generating CSV content for download...");
+
+                // Generate CSV string
+                const headers = "Name,Status,Timestamp";
+                const csvContent = [headers, ...csvRows.map(row => `${row.name},${row.status},${row.timestamp || ""}`)].join("\n");
+
+                // Create a Blob from the CSV string
+                const blob = new Blob([csvContent], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+
+                // Create a download link
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "updated_file.csv";
+                document.body.appendChild(a); // Append the link to the document
+                a.click(); // Trigger download
+                document.body.removeChild(a); // Clean up the DOM
+                URL.revokeObjectURL(url); // Clean up the blob URL
+
+                logToApp("CSV file downloaded successfully.");
+            } catch (error) {
+                logToApp(`Error generating or downloading CSV: ${error.message}`);
+                alert(`Error generating or downloading CSV: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
